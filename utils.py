@@ -31,4 +31,36 @@ def semantic_loss(out, labels):
 
     return loss
 
+def accuracy(out, labels, device):
+    label_map = {}
+    
+    for i,key in enumerate(mapping):
+        label_map[key] = i + 1
 
+    y_pred1 = torch.argmax(out, dim=-1)
+    for i in range(y_pred1.shape[0]):
+        out[i][y_pred1[i]] = 0
+    
+    y_pred2 = torch.argmax(out, dim=-1)
+    y_pred = torch.stack((y_pred1, y_pred2), dim=-1)
+    y_pred_inverted = torch.stack((y_pred2, y_pred1), dim=-1)
+    label_pred = torch.zeros(y_pred1.shape[0], device=device)
+    num_preds = y_pred.shape[-1]
+    
+    for i in mapping:
+        for val in mapping[i]:
+            val.unsqueeze_(0)
+            val = val.to(device)
+            mask = (y_pred==val) + (y_pred_inverted==val)
+            mask = (mask >= 1)
+            mask = torch.sum(mask,-1)
+            mask = mask==num_preds
+            mask = mask * label_map[i]
+            label_pred += mask
+    
+    labels = [label_map[labels[i]] for i in range(len(labels))]
+    labels = torch.tensor(labels,device=device)
+    accuracy = torch.sum(labels==label_pred)
+    accuracy = accuracy / labels.shape[0]
+    
+    return accuracy

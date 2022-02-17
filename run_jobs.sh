@@ -1,7 +1,10 @@
-declare -a models=("lstm" "cnn" "mlp")
+declare -a models=("lstm" "mlp" "cnn")
+declare -a All_Round=(42 43 44 45 46)
 
-
-for model in "${models[@]}"
+for seed in "${All_Round[@]}"
 do
-    nohup python train.py --model ${model} --logging 1 --verbose 1 --name ${model}_vanilla --checkpoint ./checkpoint --epochs 75 > nohup/${model}_vanilla.out
+    for model in "${models[@]}"
+    do
+        sbatch submit_training.sh ${seed} ${model}
+    done
 done

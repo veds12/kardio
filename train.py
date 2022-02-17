@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from models import get_model
-from utils import semantic_loss, TimeSeriesDataset
+from utils import accuracy, semantic_loss, TimeSeriesDataset
 
 def train(args):
 
@@ -60,6 +60,9 @@ def train(args):
     if args.checkpoint is not None:
         CHECKPOINT_PATH = os.path.join(args.checkpoint, args.name)
 
+        if not os.path.exists(CHECKPOINT_PATH):
+            os.makedirs(CHECKPOINT_PATH)
+
     #######################################################################
 
     ######################## LOGGING ######################################
@@ -69,7 +72,7 @@ def train(args):
         wandb.init(
             project='Kardio',
             name=args.name,
-            config=args
+            config=args,
         )
 
     ################# DATA PREPROCESSING AND LOADING ######################
@@ -98,6 +101,8 @@ def train(args):
     train_data = data[:int(0.9*data.shape[0])]
     test_data = data[int(0.9*data.shape[0]):]
 
+    pd.read_csv
+
     train_dataset = TimeSeriesDataset(train_data)
     test_dataset = TimeSeriesDataset(test_data)
 
@@ -118,7 +123,7 @@ def train(args):
 
     for epoch in range(args.epochs):
 
-        train_loss = 0
+        train_loss = []
 
         for x, labels in train_dataloader:
             
@@ -130,14 +135,14 @@ def train(args):
             loss.backward()
             opt.step()
 
-            train_loss += loss.item()
+            train_loss.append(loss.item())
 
             if args.logging:
                 wandb.log({
                     'step_loss': loss.item()
                 })
         
-        train_loss /= args.batch_size
+        train_loss = sum(train_loss) / len(train_loss)
         if args.logging:
             wandb.log({
                 'train_loss': train_loss,
@@ -148,20 +153,23 @@ def train(args):
             print(f'Epoch: {epoch} | Train Loss: {train_loss:.3f} | ', end='')
 
         if epoch % args.test_every == 0:
-            test_loss = evaluate(model, test_dataloader, device, dtype)
+            test_loss, test_acc = evaluate(model, test_dataloader, device, dtype)
             
             if args.logging:
                 wandb.log({
-                    'test_loss': test_loss
+                    'test_loss': test_loss,
+                    'test_acc': test_acc,
                 })
             
             if args.verbose:
-                print(f'Test Loss: {test_loss:.3f}')
-        
+                print(f'Test Loss: {test_loss:.3f} | Test Accuracy: {test_acc:.3f}')
+
         else:
             if args.verbose:
-                print('Test Loss: NA')
+                print('Test Loss: NA | Test Accuracy: NA')
 
+        if args.checkpoint is not None:
+            torch.save(model.state_dict(), os.path.join(CHECKPOINT_PATH, f'{args.seed}.pt'))
 
     ########################################################################
 
@@ -170,22 +178,25 @@ def evaluate(model, test_dataloader, device, dtype):
 
     with torch.no_grad():
         test_loss = 0
+        acc = []
         for x, labels in test_dataloader:
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
             out = model(x)
             loss = semantic_loss(out, labels)
             test_loss += loss.detach()
+            acc.append(accuracy(out,labels,device).detach())
+
+        test_acc = sum(acc) / len(acc)
 
     model.train()
-    return test_loss
-
+    return test_loss, test_acc
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Neural Module')
 
     parser.add_argument('--seed', type=int, default=42, help='random seed')
     parser.add_argument('--model', type=str, default='lstm', help='Type of neural module. Choose from: lstm, cnn, mlp')
-    parser.add_argument('--data', type=str, default='./data/', help='path of data')
+    parser.add_argument('--data', type=str, default='./data/raw/', help='path of data')
     parser.add_argument('--name', type=str, default=None, help='name of run')
     parser.add_argument('--checkpoint', type=str, default=None, help='path for storing model checkpoints')
     parser.add_argument('--load_chkpt', type=str, default=None, help='path for loading model checkpoints')
@@ -193,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument('--logging', type=bool, default=False, help='logging to wandb')
     parser.add_argument('--verbose', type=bool, default=False, help='print verbose')
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
-    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=200, help='number of epochs')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--stride', type=int, default=10, help='stride for sliding window')
