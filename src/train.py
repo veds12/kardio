@@ -37,7 +37,6 @@ def train(args):
         print(f'Number of training epochs: {args.epochs}')
         print(f'Learning Rate: {args.lr}')
         print(f'Batch size: {args.batch_size}')
-        print(f'Stride: {args.stride}')
         print(f'Data path: {args.data}')
         print(f'Run name: {args.name}')
         print(f'Checkpoint save path: {args.checkpoint}')
@@ -83,28 +82,20 @@ def train(args):
     if args.verbose:
         print('----------------------------------------------------')
         print('PREPARING DATA\n')
-    files = os.listdir(args.data)
-    classes = ['A', 'B', 'C', 'D']
-    data = pd.DataFrame()
+    
+    data = pd.read_csv(args.data)
+    data_N = data.loc[data['Class'] == 'N']
+    data_A = data.loc[data['Class'] == 'A']
 
-    for i, file in enumerate(files):
-        data_f = pd.read_csv(os.path.join(args.data, file))[['value']]
-        j = 0
+    data_N = data_N.sample(frac=0.2)
 
-        while j + 128 < data_f.shape[0]:
-            row = data_f[j:j+128].values
-            row = np.reshape(row, (1, 128))
-            row = np.append(row, [[classes[int(i/2)]]], axis=1)
-            data = data.append(pd.DataFrame(row))
+    data = pd.concat([data_N, data_A])
 
-            j += args.stride
-
-    data = data.sample(frac=1).reset_index(drop=True)
+    data = data.sample(frac=1)
+    data = data.dropna()
 
     train_data = data[:int(0.9*data.shape[0])]
     test_data = data[int(0.9*data.shape[0]):]
-
-    pd.read_csv
 
     train_dataset = TimeSeriesDataset(train_data)
     test_dataset = TimeSeriesDataset(test_data)
@@ -127,7 +118,7 @@ def train(args):
     for epoch in range(args.epochs):
 
         train_loss = []
-
+        l = 0
         for x, labels in train_dataloader:
             
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
@@ -139,6 +130,8 @@ def train(args):
             opt.step()
 
             train_loss.append(loss.item())
+
+            l += 1
 
             if args.logging:
                 wandb.log({
@@ -156,20 +149,23 @@ def train(args):
             print(f'Epoch: {epoch} | Train Loss: {train_loss:.3f} | ', end='')
 
         if epoch % args.test_every == 0:
-            test_loss, test_acc = evaluate(model, test_dataloader, device, dtype)
+            # test_loss, test_acc = evaluate(model, test_dataloader, device, dtype)
+            test_loss = evaluate(model, test_dataloader, device, dtype)
             
             if args.logging:
                 wandb.log({
                     'test_loss': test_loss,
-                    'test_acc': test_acc,
+                    # 'test_acc': test_acc,
                 })
             
             if args.verbose:
-                print(f'Test Loss: {test_loss:.3f} | Test Accuracy: {test_acc:.3f}')
+                # print(f'Test Loss: {test_loss:.3f} | Test Accuracy: {test_acc:.3f}')
+                print(f'Test Loss: {test_loss:.3f}')
 
         else:
             if args.verbose:
-                print('Test Loss: NA | Test Accuracy: NA')
+                # print('Test Loss: NA | Test Accuracy: NA')
+                print('Test Loss: NA')
 
         if args.checkpoint is not None:
             torch.save(model.state_dict(), os.path.join(CHECKPOINT_PATH, f'{args.seed}.pt'))
@@ -187,19 +183,19 @@ def evaluate(model, test_dataloader, device, dtype):
             out = model(x)
             loss = semantic_loss(out, labels)
             test_loss += loss.detach()
-            acc.append(accuracy(out,labels,device).detach())
+            # acc.append(accuracy(out,labels,device).detach())
 
-        test_acc = sum(acc) / len(acc)
+        # test_acc = sum(acc) / len(acc)
 
     model.train()
-    return test_loss, test_acc
+    return test_loss# , test_acc
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Neural Module')
 
     parser.add_argument('--seed', type=int, default=42, help='random seed')
-    parser.add_argument('--model', type=str, default='lstm', help='Type of neural module. Choose from: lstm, cnn, mlp')
-    parser.add_argument('--data', type=str, default='./data/raw/', help='path of data')
+    parser.add_argument('--model', type=str, default='cnn', help='Type of neural module. Choose from: lstm, cnn, mlp')
+    parser.add_argument('--data', type=str, default='../data/physionet_A_N.csv', help='path of data')
     parser.add_argument('--name', type=str, default=None, help='name of run')
     parser.add_argument('--checkpoint', type=str, default=None, help='path for storing model checkpoints')
     parser.add_argument('--load_chkpt', type=str, default=None, help='path for loading model checkpoints')
@@ -207,10 +203,9 @@ if __name__ == "__main__":
     parser.add_argument('--logging', type=bool, default=False, help='logging to wandb')
     parser.add_argument('--verbose', type=bool, default=False, help='print verbose')
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
-    parser.add_argument('--epochs', type=int, default=200, help='number of epochs')
-    parser.add_argument('--batch_size', type=int, default=64, help='batch size')
+    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
+    parser.add_argument('--batch_size', type=int, default=128, help='batch size')
     parser.add_argument('--device', type=str, default='cuda', help='device')
-    parser.add_argument('--stride', type=int, default=10, help='stride for sliding window')
 
     args = parser.parse_args()
     train(args)

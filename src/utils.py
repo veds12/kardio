@@ -1,13 +1,19 @@
 import numpy as np
+import pandas as pd
+
 import torch
 from torch.utils.data import Dataset
 
-mapping = {
-    'A': torch.tensor([[1, 5], [3, 4]]),
-    'B': torch.tensor([[4, 5], [0, 1]]),
-    'C': torch.tensor([[0, 3], [1, 2]]),
-    'D': torch.tensor([[1, 3], [0, 4]])
-}
+theory = pd.read_csv('../theory/theory_A_N.csv')
+
+Rhythm = {'regular': 0, 'irregular': 1}
+P = {'normal': 0, 'abnormal': 1, 'absent': 2, 'changing': 3}
+RateP = {'between_100_250': 0, 'between_250_350': 1, 'between_60_100': 2, 'over_350': 3, 'under_60': 4, 'zero': 5}
+P_QRS = {'after_P_always_QRS': 0, 'after_P_some_QRS_miss': 1, 'independent_P_QRS': 2, 'meaningless': 3}
+PR = {'after_QRS_is_P': 0, 'changing': 1, 'meaningless': 2, 'normal': 3, 'prolonged': 4, 'shortened': 5}
+Rate = {'between_100_250': 0, 'between_250_350': 1, 'between_60_100': 2, 'over_350': 3, 'under_60': 4}
+
+theory = theory.replace({'Rhythm': Rhythm, 'P': P, 'RateP': RateP, 'P_QRS': P_QRS, 'PR': PR, 'Rate': Rate})
 
 class TimeSeriesDataset(Dataset):
     def __init__(self, dataframe):
@@ -25,53 +31,66 @@ class TimeSeriesDataset(Dataset):
         return sample, label
 
 def semantic_loss(out, labels):
-    feedback = [mapping[labels[i]] for i in range(len(labels))]
-    output_1, output_2 = out
 
-    loss = [-torch.log(output_1[i][feedback[i][0][0]] * output_2[i][feedback[i][0][1]] + output_1[i][feedback[i][1][0]] * output_2[i][feedback[i][1][1]]) for i in range(out[0].shape[0])]
-    loss = torch.mean(torch.stack(loss))
+    out_dict = {
+        'Rhythm': out[0],
+        'P': out[1],
+        'RateP': out[2],
+        'P_QRS': out[3],
+        'PR': out[4],
+        'Rate': out[5]
+        }
 
-    return loss
+    labels = list(labels)
+    labels = [theory.loc[theory['Class'] == label].drop(['Class'], axis=1) for label in labels]
 
-def accuracy(out, labels, device):
-    label_map = {}
+    batch_loss = []
+    for b in range(out[0].shape[0]):
+        loss = 0
+        for i in range(labels[b].shape[0]):
+            f1 = out_dict['Rhythm'][b][int(labels[b].iloc[i]['Rhythm'])]
+            f2 = out_dict['P'][b][int(labels[b].iloc[i]['P'])]
+            f3 = out_dict['RateP'][b][int(labels[b].iloc[i]['RateP'])]
+            f4 = out_dict['P_QRS'][b][int(labels[b].iloc[i]['P_QRS'])]
+            f5 = out_dict['PR'][b][int(labels[b].iloc[i]['PR'])]
+            f6 = out_dict['Rate'][b][int(labels[b].iloc[i]['Rate'])]
 
-    # output_1 = out[0].unsqueeze(1)
-    # output_2 = out[1].unsqueeze(1).permute(0, 2, 1)
-
-    # probs = output_1*output_2
-
-    # n = probs.shape[0]
-    # d = probs.shape[1]
-
-    # m = probs.view(n, -1).argmax(1)
-    # max_indices = torch.cat(((m / d).view(-1, 1), (m % d).view(-1, 1)), dim=1)
+            loss += f1 * f2 * f3 * f4 * f5 * f6
+            # loss += out_dict['Rhythm'][b][labels[b].iloc[i]['Rhythm']]*out_dict['P'][labels[b].iloc[i]['P']]*out_dict['RateP'][labels[b].iloc[i]['RateP']]*out_dict['P_QRS'][labels[b].iloc[i]['P_QRS']]*out_dict['PR'][labels[b].iloc[i]['PR']]*out_dict['Rate'][labels[b].iloc[i]['Rate']]
+        batch_loss.append(-torch.log(loss))
     
-    for i,key in enumerate(mapping):
-        label_map[key] = i + 1
+    total_loss = torch.mean(torch.stack(batch_loss))
 
-    y_pred1 = torch.argmax(out[0], dim=-1)
-    y_pred2 = torch.argmax(out[1], dim=-1)
+    return total_loss
 
-    y_pred = torch.stack((y_pred1, y_pred2), dim=-1)
-    y_pred_inverted = torch.stack((y_pred2, y_pred1), dim=-1)
-    label_pred = torch.zeros(y_pred1.shape[0], device=device)
-    num_preds = y_pred.shape[-1]
+def metrics(out, labels, device):
+
+    labels = list(labels)
+    predictions = []
+
+    f1 = torch.argmax(out[0], dim=-1)
+    f2 = torch.argmax(out[1], dim=-1)
+    f3 = torch.argmax(out[2], dim=-1)
+    f4 = torch.argmax(out[3], dim=-1)
+    f5 = torch.argmax(out[4], dim=-1)
+    f6 = torch.argmax(out[5], dim=-1)
+
+    for b in range(out[0].shape[0]):
+        label = labels[b]
+
+        for index, row in theory.iterrows():
+            if int(f1[b]) == row['Rhythm'] and int(f2[b]) == row['P'] and int(f3[b]) == row['RateP'] and int(f4[b]) == row['P_QRS'] and int(f5[b]) == row['PR'] and int(f6[b]) == row['Rate']:
+                predictions.append(row['Class'])
+                break
+        else:
+            predictions.append('None')
+
+    correct = 0
+    for i in range(len(predictions)):
+        if labels[i] == predictions[i]:
+            correct += 1
+
+    accuracy = correct / len(labels)
+            
     
-    for i in mapping:
-        for val in mapping[i]:
-            val.unsqueeze_(0)
-            val = val.to(device)
-            mask = (y_pred==val) + (y_pred_inverted==val)
-            mask = (mask >= 1)
-            mask = torch.sum(mask,-1)
-            mask = mask==num_preds
-            mask = mask * label_map[i]
-            label_pred += mask
-    
-    labels = [label_map[labels[i]] for i in range(len(labels))]
-    labels = torch.tensor(labels,device=device)
-    accuracy = torch.sum(labels==label_pred)
-    accuracy = accuracy / labels.shape[0]
-    
-    return accuracy
+    return accuracy, precision, recall, f1_score

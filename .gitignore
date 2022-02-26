@@ -1,7 +1,7 @@
-neurolog
 prototype.py
 wandb
 nohup
 *.out
 __pycache__/
 checkpoint/
+data/

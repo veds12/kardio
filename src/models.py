@@ -22,18 +22,33 @@ def VanillaMLP(
 
     return nn.Sequential(*_layers)
 
+def conv_block(in_channels, out_channels, stride):
+    block = nn.Sequential(
+        nn.BatchNorm1d(in_channels),
+        nn.ReLU(),
+        nn.Dropout(),
+        nn.Conv1d(in_channels, out_channels, kernel_size=128, stride=stride, bias=False),
+        nn.BatchNorm1d(out_channels),
+        nn.ReLU(),
+        nn.Dropout(),
+        nn.Conv1d(out_channels, out_channels, kernel_size=128, stride=stride, bias=False),
+        nn.MaxPool1d(kernel_size=2)
+    )
+
+    return block
+
 class LSTMModule(nn.Module):
     def __init__(
         self,
         input_size=1,
-        hidden_size=32,
-        num_layers=1,
+        hidden_size=64,
+        num_layers=2,
         bias=True,
         batch_first=False,
         dropout=0,
         bidirectional=False,
         proj_size=0,
-        out_size=6,
+        out_sizes=[2, 4, 6, 4, 6, 5],
     ):
         super(LSTMModule, self).__init__()
 
@@ -53,8 +68,7 @@ class LSTMModule(nn.Module):
         else:
             self.proj_size = proj_size
 
-        self.output_1 = nn.Linear(self.proj_size, out_size)
-        self.output_2 = nn.Linear(self.proj_size, out_size)
+        self.heads = nn.ModuleList([nn.Linear(self.proj_size, out_size) for out_size in out_sizes])
 
     def forward(self, x, h_0=None, c_0=None):
         if h_0 == None or c_0 == None:
@@ -62,77 +76,60 @@ class LSTMModule(nn.Module):
         else:
             output, _ = self.lstm(x, (h_0, c_0))
         
-        output_1 = self.output_1(output[-1])
-        output_1 = nn.Softmax()(output_1)
+        outputs = [nn.Softmax(-1)(self.heads[i](output[-1])) for i in range(len(self.heads))]
 
-        output_2 = self.output_2(output[-1])
-        output_2 = nn.Softmax()(output_2)
-
-        return output_1, output_2
+        return outputs
 
 class CNNModule(nn.Module):
     def __init__(
         self,
         in_channels=1,
-        out_size=6,
+        out_sizes=[2, 4, 6, 4, 6, 5],
     ):
         super(CNNModule, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=in_channels, out_channels=64, kernel_size=3),
-            nn.ReLU(),
-            nn.Conv1d(in_channels=64, out_channels=64, kernel_size=3),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.MaxPool1d(kernel_size=2),
-            nn.Flatten()
-        )
+        self.block1 = conv_block(in_channels, 64, 1)
+        self.block2 = conv_block(64, 64, 1)
+        self.block3 = conv_block(64, 64, 1)
         
         self.output_c = nn.Sequential(
-            nn.Linear(3968, 512),
+            nn.Linear(7360, 512),
             nn.ReLU(),
         )
 
-        self.output_1 = nn.Linear(512, out_size)
-        self.output_2 = nn.Linear(512, out_size)
+        self.heads = nn.ModuleList([nn.Linear(512, out_size) for out_size in out_sizes])
     
     def forward(self, x):
         x = x.permute(1, 2, 0)
-        x = self.conv(x).squeeze(1)
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = nn.Flatten()(x)
         x = self.output_c(x)
-        
-        output_1 = self.output_1(x)
-        output_1 = nn.Softmax()(output_1)
 
-        output_2 = self.output_2(x)
-        output_2 = nn.Softmax()(output_2)
+        outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
 
-        return output_1, output_2
+        return outputs
 
 class MLPModule(nn.Module):
     def __init__(
         self,
-        in_length=128,
-        hidden_layers=[64, 128],
-        out_size=6,
+        in_length=2700,
+        hidden_layers=[256, 512, 64],
+        out_sizes=[2, 4, 6, 4, 6, 5],
     ):
         super(MLPModule, self).__init__()
         layer_sizes = [in_length, *hidden_layers]
         self.mlp = VanillaMLP(layer_sizes, "relu")
 
-        self.output_1 = nn.Linear(hidden_layers[-1], out_size)
-        self.output_2 = nn.Linear(hidden_layers[-1], out_size)
+        self.heads = nn.ModuleList([nn.Linear(hidden_layers[-1], out_size) for out_size in out_sizes])
 
     def forward(self, x):
         x = x.permute(1, 2, 0).squeeze(1)
         x = self.mlp(x)
 
-        output_1 = self.output_1(x)
-        output_1 = nn.Softmax()(output_1)
+        outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
 
-        output_2 = self.output_2(x)
-        output_2 = nn.Softmax()(output_2)
-
-        return output_1, output_2
+        return outputs
 
 MODELS = {
     'lstm': LSTMModule,
