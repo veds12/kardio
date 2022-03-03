@@ -6,15 +6,15 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 import numpy as np
 import pandas as pd
-import wandb
 
+import wandb
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from models import get_model
-from utils import accuracy, semantic_loss, TimeSeriesDataset
+from utils import  semantic_loss, TimeSeriesDataset #,accuracy
 
 def train(args):
 
@@ -83,9 +83,12 @@ def train(args):
         print('----------------------------------------------------')
         print('PREPARING DATA\n')
     
+    rescale_factor = 0.1
+
     data = pd.read_csv(args.data)
-    data_N = data.loc[data['Class'] == 'N']
-    data_A = data.loc[data['Class'] == 'A']
+
+    data_N = data.loc[data['CLASS'] == 'N']
+    data_A = data.loc[data['CLASS'] == 'A']
 
     data_N = data_N.sample(frac=0.2)
 
@@ -93,6 +96,7 @@ def train(args):
 
     data = data.sample(frac=1)
     data = data.dropna()
+
 
     train_data = data[:int(0.9*data.shape[0])]
     test_data = data[int(0.9*data.shape[0]):]
@@ -102,6 +106,7 @@ def train(args):
 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=test_data.shape[0], shuffle=True)
+
 
     if args.verbose:
         print(f'Number of training samples: {train_data.shape[0]}')
@@ -120,7 +125,6 @@ def train(args):
         train_loss = []
         l = 0
         for x, labels in train_dataloader:
-            
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
             out = model(x)
             loss = semantic_loss(out, labels)
@@ -188,7 +192,7 @@ def evaluate(model, test_dataloader, device, dtype):
         # test_acc = sum(acc) / len(acc)
 
     model.train()
-    return test_loss# , test_acc
+    return test_loss # , test_acc
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Neural Module')

@@ -27,11 +27,11 @@ def conv_block(in_channels, out_channels, stride):
         nn.BatchNorm1d(in_channels),
         nn.ReLU(),
         nn.Dropout(),
-        nn.Conv1d(in_channels, out_channels, kernel_size=128, stride=stride, bias=False),
+        nn.Conv1d(in_channels, out_channels, kernel_size=16, stride=stride, bias=False),
         nn.BatchNorm1d(out_channels),
         nn.ReLU(),
         nn.Dropout(),
-        nn.Conv1d(out_channels, out_channels, kernel_size=128, stride=stride, bias=False),
+        nn.Conv1d(out_channels, out_channels, kernel_size=16, stride=stride, bias=False),
         nn.MaxPool1d(kernel_size=2)
     )
 
@@ -89,10 +89,10 @@ class CNNModule(nn.Module):
         super(CNNModule, self).__init__()
         self.block1 = conv_block(in_channels, 64, 1)
         self.block2 = conv_block(64, 64, 1)
-        self.block3 = conv_block(64, 64, 1)
+        #self.block3 = conv_block(64, 64, 1)
         
         self.output_c = nn.Sequential(
-            nn.Linear(7360, 512),
+            nn.Linear(2880, 512),
             nn.ReLU(),
         )
 
@@ -102,7 +102,7 @@ class CNNModule(nn.Module):
         x = x.permute(1, 2, 0)
         x = self.block1(x)
         x = self.block2(x)
-        x = self.block3(x)
+        #x = self.block3(x)
         x = nn.Flatten()(x)
         x = self.output_c(x)
 
