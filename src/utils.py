@@ -1,5 +1,10 @@
+from threading import Thread
+
 import numpy as np
 import pandas as pd
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import accuracy_score
 
 import torch
 from torch.utils.data import Dataset
@@ -29,6 +34,76 @@ class TimeSeriesDataset(Dataset):
         label = self.dataframe.iloc[idx, -1]
 
         return sample, label
+
+def metrics(out, labels):
+
+    labels = list(labels)
+    predictions = []
+
+    f1 = torch.argmax(out[0], dim=-1)
+    f2 = torch.argmax(out[1], dim=-1)
+    f3 = torch.argmax(out[2], dim=-1)
+    f4 = torch.argmax(out[3], dim=-1)
+    f5 = torch.argmax(out[4], dim=-1)
+    f6 = torch.argmax(out[5], dim=-1)
+
+    for b in range(out[0].shape[0]):
+        label = labels[b]
+
+        for index, row in theory.iterrows():
+            if int(f1[b]) == row['Rhythm'] and int(f2[b]) == row['P'] and int(f3[b]) == row['RateP'] and int(f4[b]) == row['P_QRS'] and int(f5[b]) == row['PR'] and int(f6[b]) == row['Rate']:
+                predictions.append(row['Class'])
+                break
+        else:
+            predictions.append('None')
+
+    acc = accuracy_score(labels, predictions)
+    prec = precision_score(labels, predictions, average='macro')
+    rec = recall_score(labels, predictions, average='macro')
+
+    tp_A, fp_A, fn_A = 0, 0, 0
+    tp_N, fp_N, fn_N = 0, 0, 0
+
+    for l, p in zip(labels, predictions):
+        if p == 'A':
+            if l == 'A':
+                tp_A += 1
+            elif l == 'N':
+                fp_A += 1
+                fn_N += 1
+        elif p == 'N':
+            if l == 'N':
+                tp_N += 1
+            elif l == 'A':
+                fp_N += 1
+                fn_A += 1
+        else:
+            if l == 'A':
+                fn_A += 1
+            else:
+                fn_N += 1
+
+    try:
+        prec_A = tp_A / (tp_A + fp_A)
+    except:
+        prec_A = 0
+    
+    try:
+        rec_A = tp_A / (tp_A + fn_A)
+    except:
+        rec_A = 0
+
+    try:
+        prec_N = tp_N / (tp_N + fp_N)
+    except:
+        prec_N = 0
+
+    try:
+        rec_N = tp_N / (tp_N + fn_N)
+    except:
+        rec_N = 0
+            
+    return acc, prec, rec, prec_A, prec_N, rec_A, rec_N
 
 def semantic_loss(out, labels):
 
@@ -62,35 +137,3 @@ def semantic_loss(out, labels):
     total_loss = torch.mean(torch.stack(batch_loss))
 
     return total_loss
-
-def metrics(out, labels, device):
-
-    labels = list(labels)
-    predictions = []
-
-    f1 = torch.argmax(out[0], dim=-1)
-    f2 = torch.argmax(out[1], dim=-1)
-    f3 = torch.argmax(out[2], dim=-1)
-    f4 = torch.argmax(out[3], dim=-1)
-    f5 = torch.argmax(out[4], dim=-1)
-    f6 = torch.argmax(out[5], dim=-1)
-
-    for b in range(out[0].shape[0]):
-        label = labels[b]
-
-        for index, row in theory.iterrows():
-            if int(f1[b]) == row['Rhythm'] and int(f2[b]) == row['P'] and int(f3[b]) == row['RateP'] and int(f4[b]) == row['P_QRS'] and int(f5[b]) == row['PR'] and int(f6[b]) == row['Rate']:
-                predictions.append(row['Class'])
-                break
-        else:
-            predictions.append('None')
-
-    correct = 0
-    for i in range(len(predictions)):
-        if labels[i] == predictions[i]:
-            correct += 1
-
-    accuracy = correct / len(labels)
-            
-    
-    return accuracy, precision, recall, f1_score

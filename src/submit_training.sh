@@ -17,4 +17,4 @@ name=$3
 
 
 ### run training script
-CUDA_LAUNCH_BLOCKING=1 python train.py --seed ${seed} --model ${model} --logging 1 --verbose 1 --name ${name} --checkpoint ./checkpoint --epochs 100
+CUDA_LAUNCH_BLOCKING=1 python train.py --seed ${seed} --model ${model} --logging 1 --verbose 0 --name ${name} --checkpoint ./checkpoint --epochs 200

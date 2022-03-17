@@ -27,11 +27,11 @@ def conv_block(in_channels, out_channels, stride):
         nn.BatchNorm1d(in_channels),
         nn.ReLU(),
         nn.Dropout(),
-        nn.Conv1d(in_channels, out_channels, kernel_size=16, stride=stride, bias=False),
+        nn.Conv1d(in_channels, out_channels, kernel_size=32, stride=stride, bias=False),
         nn.BatchNorm1d(out_channels),
         nn.ReLU(),
         nn.Dropout(),
-        nn.Conv1d(out_channels, out_channels, kernel_size=16, stride=stride, bias=False),
+        nn.Conv1d(out_channels, out_channels, kernel_size=32, stride=stride, bias=False),
         nn.MaxPool1d(kernel_size=2)
     )
 
@@ -80,6 +80,39 @@ class LSTMModule(nn.Module):
 
         return outputs
 
+class CNNSimple(nn.Module):
+    def __init__(
+        self,
+        in_channels=1,
+        out_sizes=[2, 4, 6, 4, 6, 5],
+    ):
+        super(CNNSimple, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=in_channels, out_channels=64, kernel_size=32),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=64, out_channels=64, kernel_size=3),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Flatten()
+        )
+        
+        self.output_c = nn.Sequential(
+            nn.Linear(7552, 512),
+            nn.ReLU(),
+        )
+
+        self.heads = nn.ModuleList([nn.Linear(512, out_size) for out_size in out_sizes])
+    
+    def forward(self, x):
+        x = x.permute(1, 2, 0)
+        x = self.conv(x).squeeze(1)
+        x = self.output_c(x)
+        
+        outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
+
+        return outputs
+
 class CNNModule(nn.Module):
     def __init__(
         self,
@@ -89,10 +122,10 @@ class CNNModule(nn.Module):
         super(CNNModule, self).__init__()
         self.block1 = conv_block(in_channels, 64, 1)
         self.block2 = conv_block(64, 64, 1)
-        #self.block3 = conv_block(64, 64, 1)
+        # self.block3 = conv_block(64, 64, 1)
         
         self.output_c = nn.Sequential(
-            nn.Linear(2880, 512),
+            nn.Linear(1344, 512),
             nn.ReLU(),
         )
 
@@ -102,7 +135,7 @@ class CNNModule(nn.Module):
         x = x.permute(1, 2, 0)
         x = self.block1(x)
         x = self.block2(x)
-        #x = self.block3(x)
+        # x = self.block3(x)
         x = nn.Flatten()(x)
         x = self.output_c(x)
 
@@ -135,6 +168,7 @@ MODELS = {
     'lstm': LSTMModule,
     'cnn': CNNModule,
     'mlp': MLPModule,
+    'cnn_simple': CNNSimple,
 }
 
 def get_model(model_name):
