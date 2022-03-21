@@ -5,6 +5,6 @@ for seed in "${All_Round[@]}"
 do
     for model in "${models[@]}"
     do
-        sbatch submit_training.sh ${seed} ${model} kardio_${model}_long
+        sbatch submit_training.sh ${seed} ${model} ${model}_neural_branch_final
     done
 done

@@ -2,11 +2,13 @@ import os
 import argparse
 import warnings
 import time
+import random
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 
 import wandb
 import torch
@@ -15,7 +17,40 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from models import get_model
-from utils import  semantic_loss, TimeSeriesDataset, metrics
+from utils import  semantic_loss, TimeSeriesDataset, inference
+
+def log_to_wandb(test_loss, ns_metrics, n_metrics):
+    
+    if n_metrics is not None:
+        wandb.log({
+                'test_loss': test_loss,
+                'ns_test_accuracy': ns_metrics['acc'],
+                'ns_test_precision': ns_metrics['prec'],
+                'ns_test_recall': ns_metrics['rec'],
+                'ns_test_precision_A': ns_metrics['prec_A'],
+                'ns_test_recall_A': ns_metrics['rec_A'],
+                'ns_test_precision_N': ns_metrics['prec_N'],
+                'ns_test_recall_N': ns_metrics['rec_N'],
+                'n_test_accuracy': n_metrics['acc'],
+                'n_test_precision': n_metrics['prec'],
+                'n_test_recall': n_metrics['rec'],
+                'n_test_precision_A': n_metrics['prec_A'],
+                'n_test_recall_A': n_metrics['rec_A'],
+                'n_test_precision_N': n_metrics['prec_N'],
+                'n_test_recall_N': n_metrics['rec_N'],
+                })
+    else:
+        wandb.log({
+                'test_loss': test_loss,
+                'ns_test_accuracy': ns_metrics['acc'],
+                'ns_test_precision': ns_metrics['prec'],
+                'ns_test_recall': ns_metrics['rec'],
+                'ns_test_precision_A': ns_metrics['prec_A'],
+                'ns_test_recall_A': ns_metrics['rec_A'],
+                'ns_test_precision_N': ns_metrics['prec_N'],
+                'ns_test_recall_N': ns_metrics['rec_N'],
+                })
+
 
 def train(args):
 
@@ -46,9 +81,18 @@ def train(args):
 
     ######################################################################
 
+    ######################## SET SEED ####################################
+
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.backends.cudnn.benchmark = False
+
     ################## CONFIGURE MODEL AND OPTIMIZER #####################
 
-    model = get_model(args.model)().to(device).to(dtype)
+    model = get_model(args.model)(
+        neural_branch=args.neural_branch
+    ).to(device).to(dtype)
     model.train()
 
     opt = optim.Adam(model.parameters(), lr=args.lr)
@@ -130,11 +174,16 @@ def train(args):
         l = 0
         for x, labels in train_dataloader:
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
-            start_1 = time.time()
-            out = model(x)
-            end_1 = time.time()
-            loss = semantic_loss(out, labels)
-            end_2 = time.time()
+            # start_1 = time.time()
+            features_out, neural_out = model(x)
+            # end_1 = time.time()
+            loss = semantic_loss(features_out, labels)                          # Loss with the symbolic module
+            # end_2 = time.time()
+            
+            if args.neural_branch:
+                encoded_labels = LabelEncoder().fit(labels).transform(labels)
+                encoded_labels = torch.tensor(encoded_labels, dtype=neural_out.dtype, device=neural_out.device).reshape(neural_out.shape[0], 1)
+                loss += nn.BCEWithLogitsLoss()(neural_out, encoded_labels)        # Loss of the neural branch
 
             opt.zero_grad()
             loss.backward()
@@ -149,7 +198,7 @@ def train(args):
                     'step_loss': loss.item()
                 })
             
-            print(f'Forward pass: {end_1 - start_1:.4f}s | Loss computation: {end_2 - end_1:.4f}s')
+            # print(f'Forward pass: {end_1 - start_1:.4f}s | Loss computation: {end_2 - end_1:.4f}s')
         
         train_loss = sum(train_loss) / len(train_loss)
         if args.logging:
@@ -162,78 +211,66 @@ def train(args):
             print(f'Epoch: {epoch} | Train Loss: {train_loss:.3f} | ', end='')
 
         if epoch % args.test_every == 0:
-            test_loss, avg_acc, avg_prec, avg_rec, prec_A, rec_A, prec_N, rec_N  = evaluate(model, test_dataloader, device, dtype)
+            if epoch == int((args.epochs - 1) / args.test_every):
+                test_loss, ns_metrics, n_metrics  = evaluate(model, test_dataloader, device, dtype, record=True)
+            else:
+                test_loss, ns_metrics, n_metrics  = evaluate(model, test_dataloader, device, dtype)
             # test_loss = evaluate(model, test_dataloader, device, dtype)
             
             if args.logging:
-                wandb.log({
-                    'test_loss': test_loss,
-                    'test_accuracy': avg_acc,
-                    'avg_test_precision': avg_prec,
-                    'avg_test_recall': avg_rec,
-                    'test_precision_A': prec_A,
-                    'test_recall_A': rec_A,
-                    'test_precision_N': prec_N,
-                    'test_recall_N': rec_N,
-                })
+                log_to_wandb(test_loss, ns_metrics, n_metrics)
             
             if args.verbose:
-                print(f'Test Loss: {test_loss:.3f} | Test Accuracy: {avg_acc:.3f} | Test Precision: {avg_prec:.3f} | Test Recall: {avg_rec:.3f}')
+                ns_acc = round(ns_metrics['acc'], 3)
+
+                if n_metrics is not None:
+                    n_acc = round(n_metrics['acc'], 3)
+                else:
+                    n_acc = 'NA'
+                
+                print(f'Test Loss: {test_loss:.3f} | NS Test Accuracy: {ns_acc} | N Test Accuracy: {n_acc}')
                 # print(f'Test Loss: {test_loss:.3f}')
 
         else:
             if args.verbose:
                 # print('Test Loss: NA | Test Accuracy: NA')
-                print('Test Loss: NA | Test Accuracy: NA | Test Precision: NA | Test Recall: NA')
+                print('Test Loss: NA | NS Test Accuracy: NA | N Test Accuracy: NA')
 
         if args.checkpoint is not None:
             torch.save(model.state_dict(), os.path.join(CHECKPOINT_PATH, f'{args.seed}.pt'))
 
     ########################################################################
 
-def evaluate(model, test_dataloader, device, dtype):
+def evaluate(model, test_dataloader, device, dtype, record=False):
     model.eval()
+    label_encoder = LabelEncoder()
 
     with torch.no_grad():
         test_loss = 0
-        acc_list = []
-        prec_list = []
-        rec_list = []
-        prec_A_list = []
-        rec_A_list = []
-        prec_N_list = []
-        rec_N_list = []
 
         for x, labels in test_dataloader:
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
-            out = model(x)
-            loss = semantic_loss(out, labels)
-            test_loss += loss.detach()
-            acc, prec, rec, prec_A, prec_N, rec_A, rec_N = metrics(out, labels)
-            acc_list.append(acc)
-            prec_list.append(prec)
-            rec_list.append(rec)
-            prec_A_list.append(prec_A)
-            rec_A_list.append(rec_A)
-            prec_N_list.append(prec_N)
-            rec_N_list.append(rec_N)
+            features_out, neural_out = model(x)
+            loss = semantic_loss(features_out, labels)
 
-        avg_acc = sum(acc_list) / len(acc_list)
-        avg_prec = sum(prec_list) / len(prec_list)
-        avg_rec = sum(rec_list) / len(rec_list)
-        prec_A = sum(prec_A_list) / len(prec_A_list)
-        rec_A = sum(rec_A_list) / len(rec_A_list)
-        prec_N = sum(prec_N_list) / len(prec_N_list)
-        rec_N = sum(rec_N_list) / len(rec_N_list)
+            if args.neural_branch:
+                label_encoder.fit(labels)
+                encoded_labels = label_encoder.transform(labels)
+                encoded_labels = torch.tensor(encoded_labels, dtype=neural_out.dtype, device=neural_out.device).reshape(neural_out.shape[0], 1)
+                loss += nn.BCEWithLogitsLoss()(neural_out, encoded_labels)        # Loss of the neural branch
+
+            test_loss += loss.detach()
+            ns_metrics, n_metrics = inference(features_out, neural_out, labels, label_encoder, record=record)
 
     model.train()
-    return test_loss, avg_acc, avg_prec, avg_rec, prec_A, rec_A, prec_N, rec_N
+    return test_loss, ns_metrics, n_metrics
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Neural Module')
+    parser = argparse.ArgumentParser(description='Kardio')
 
     parser.add_argument('--seed', type=int, default=42, help='random seed')
     parser.add_argument('--model', type=str, default='cnn', help='Type of neural module. Choose from: lstm, cnn, mlp')
+    parser.add_argument('--neural_branch', type=bool, default=True, help='Whether to use a neural branch or not')
     parser.add_argument('--data', type=str, default='../data/physionet_A_N_rescaled.csv', help='path of data')
     parser.add_argument('--name', type=str, default=None, help='name of run')
     parser.add_argument('--checkpoint', type=str, default=None, help='path for storing model checkpoints')

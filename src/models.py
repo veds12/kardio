@@ -85,6 +85,7 @@ class CNNSimple(nn.Module):
         self,
         in_channels=1,
         out_sizes=[2, 4, 6, 4, 6, 5],
+        neural_branch=False,
     ):
         super(CNNSimple, self).__init__()
         self.conv = nn.Sequential(
@@ -98,38 +99,55 @@ class CNNSimple(nn.Module):
         )
         
         self.output_c = nn.Sequential(
-            nn.Linear(7552, 512),
+            nn.Linear(7552, 128),
             nn.ReLU(),
         )
 
-        self.heads = nn.ModuleList([nn.Linear(512, out_size) for out_size in out_sizes])
+        self.heads = nn.ModuleList([nn.Linear(128, out_size) for out_size in out_sizes])
+        self.neural_branch = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
     
     def forward(self, x):
         x = x.permute(1, 2, 0)
         x = self.conv(x).squeeze(1)
         x = self.output_c(x)
-        
-        outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
 
-        return outputs
+        
+        feature_outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
+        neural_output = self.neural_branch(x)
+
+        return feature_outputs, neural_output
 
 class CNNModule(nn.Module):
     def __init__(
         self,
         in_channels=1,
         out_sizes=[2, 4, 6, 4, 6, 5],
+        neural_branch=False,
     ):
         super(CNNModule, self).__init__()
         self.block1 = conv_block(in_channels, 64, 1)
         self.block2 = conv_block(64, 64, 1)
         # self.block3 = conv_block(64, 64, 1)
+        self.neural_branch = neural_branch
         
         self.output_c = nn.Sequential(
-            nn.Linear(1344, 512),
+            nn.Linear(1344, 128),
             nn.ReLU(),
         )
 
-        self.heads = nn.ModuleList([nn.Linear(512, out_size) for out_size in out_sizes])
+        self.heads = nn.ModuleList([nn.Linear(128, out_size) for out_size in out_sizes])
+
+        if neural_branch:
+            self.neural_branch = nn.Sequential(
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, 1),
+            )
     
     def forward(self, x):
         x = x.permute(1, 2, 0)
@@ -139,9 +157,15 @@ class CNNModule(nn.Module):
         x = nn.Flatten()(x)
         x = self.output_c(x)
 
-        outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
+        feature_outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
 
-        return outputs
+        if self.neural_branch:
+            neural_output = self.neural_branch(x)
+        else:
+            neural_output = None
+
+
+        return feature_outputs, neural_output
 
 class MLPModule(nn.Module):
     def __init__(
