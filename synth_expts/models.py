@@ -70,6 +70,58 @@ class LSTMModule(nn.Module):
 
         return output_1, output_2
 
+class CNNModuleBranch(nn.Module):
+    def __init__(
+        self,
+        in_channels=1,
+        out_sizes=[6, 6],
+        neural_branch=False,
+    ):
+        super(CNNModuleBranch, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=in_channels, out_channels=64, kernel_size=3),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=64, out_channels=64, kernel_size=3),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Flatten()
+        )
+        # self.block3 = conv_block(64, 64, 1)
+        self.neural_branch = neural_branch
+        
+        self.output_c = nn.Sequential(
+            nn.Linear(3968, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 128),
+            nn.ReLU(),
+        )
+
+        self.heads = nn.ModuleList([nn.Linear(128, out_size) for out_size in out_sizes])
+
+        if neural_branch:
+            self.neural_branch = nn.Sequential(
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, 4),
+            )
+    
+    def forward(self, x):
+        x = x.permute(1, 2, 0)
+        x = self.conv(x).squeeze(1)
+        # x = self.block3(x)
+        x = self.output_c(x)
+
+        feature_outputs = [nn.Softmax(-1)(self.heads[i](x)) for i in range(len(self.heads))]
+
+        if self.neural_branch:
+            neural_output = self.neural_branch(x)
+        else:
+            neural_output = None
+
+
+        return feature_outputs, neural_output
+
 class CNNModule(nn.Module):
     def __init__(
         self,
@@ -90,10 +142,12 @@ class CNNModule(nn.Module):
         self.output_c = nn.Sequential(
             nn.Linear(3968, 512),
             nn.ReLU(),
+            nn.Linear(512, 128),
+            nn.ReLU(),
         )
 
-        self.output_1 = nn.Linear(512, out_size)
-        self.output_2 = nn.Linear(512, out_size)
+        self.output_1 = nn.Linear(128, out_size)
+        self.output_2 = nn.Linear(128, out_size)
     
     def forward(self, x):
         x = x.permute(1, 2, 0)
@@ -136,7 +190,7 @@ class MLPModule(nn.Module):
 
 MODELS = {
     'lstm': LSTMModule,
-    'cnn': CNNModule,
+    'cnn': CNNModuleBranch,
     'mlp': MLPModule,
 }
 

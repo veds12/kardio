@@ -9,8 +9,8 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
-
 import wandb
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -128,8 +128,6 @@ def train(args):
     if args.verbose:
         print('----------------------------------------------------')
         print('PREPARING DATA\n')
-    
-    rescale_factor = 0.1
 
     data = pd.read_csv(args.data)
 
@@ -181,7 +179,7 @@ def train(args):
             # end_2 = time.time()
             
             if args.neural_branch:
-                encoded_labels = LabelEncoder().fit(labels).transform(labels)
+                encoded_labels = LabelEncoder().fit(['A', 'N']).transform(labels)
                 encoded_labels = torch.tensor(encoded_labels, dtype=neural_out.dtype, device=neural_out.device).reshape(neural_out.shape[0], 1)
                 loss += nn.BCEWithLogitsLoss()(neural_out, encoded_labels)        # Loss of the neural branch
 
@@ -254,7 +252,7 @@ def evaluate(model, test_dataloader, device, dtype, record=False):
             loss = semantic_loss(features_out, labels)
 
             if args.neural_branch:
-                label_encoder.fit(labels)
+                label_encoder.fit(['A', 'N'])
                 encoded_labels = label_encoder.transform(labels)
                 encoded_labels = torch.tensor(encoded_labels, dtype=neural_out.dtype, device=neural_out.device).reshape(neural_out.shape[0], 1)
                 loss += nn.BCEWithLogitsLoss()(neural_out, encoded_labels)        # Loss of the neural branch

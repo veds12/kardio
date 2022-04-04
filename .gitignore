@@ -5,3 +5,4 @@ nohup
 __pycache__/
 checkpoint/
 data/
+*.txt
