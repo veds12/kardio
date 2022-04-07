@@ -160,7 +160,6 @@ def train(args):
         train_loss = []
 
         for x, labels in train_dataloader:
-            
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
             features_out, neural_out = model(x)
             loss = semantic_loss(features_out, labels)
