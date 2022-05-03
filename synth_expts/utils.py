@@ -8,51 +8,12 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 
-def loss_A(output_1, output_2):
-    a = output_1[1] * output_2[5] * (1 - output_1[0]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4])
-    b = output_1[3] * output_2[4] * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[5])
-    c = output_2[1] * output_1[5] * (1 - output_2[0]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4])
-    d = output_2[3] * output_1[4] * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[5])
-
-    return -torch.log(a + b + c + d)
-
-def loss_B(output_1, output_2):
-    a = output_1[4] * output_2[5] * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4])
-    b = output_1[0] * output_2[1] * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5])
-    c = output_2[4] * output_1[5] * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4])
-    d = output_2[0] * output_1[1] * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5])
-
-    return -torch.log(a + b + c + d)
-
-def loss_C(output_1, output_2):
-    a = output_1[0] * output_2[3] * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[4]) * (1 - output_2[5])
-    b = output_1[1] * output_2[2] * (1 - output_1[0]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5])
-    c = output_2[0] * output_1[3] * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[4]) * (1 - output_1[5])
-    d = output_2[1] * output_1[2] * (1 - output_2[0]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5])
-
-    return -torch.log(a + b + c + d)
-
-def loss_D(output_1, output_2):
-    a = output_1[1] * output_2[3] * (1 - output_1[0]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[4]) * (1 - output_2[5])
-    b = output_1[0] * output_2[4] * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[4]) * (1 - output_1[5]) * (1 - output_2[0]) * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[5])
-    c = output_2[1] * output_1[3] * (1 - output_2[0]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[4]) * (1 - output_1[5])
-    d = output_2[0] * output_1[4] * (1 - output_2[1]) * (1 - output_2[2]) * (1 - output_2[3]) * (1 - output_2[4]) * (1 - output_2[5]) * (1 - output_1[0]) * (1 - output_1[1]) * (1 - output_1[2]) * (1 - output_1[3]) * (1 - output_1[5])
-
-    return -torch.log(a + b + c + d)
-
-
-theory = {
-    'A': torch.tensor([[1, 5], [3, 4], [5, 1], [4, 3]]),
-    'B': torch.tensor([[4, 5], [0, 1], [1, 0], [5, 4]]),
-    'C': torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]),
-    'D': torch.tensor([[1, 3], [0, 4], [4, 0], [3, 1]]),
-}
 
 mapping = {
-    'A': loss_A,
-    'B': loss_B,
-    'C': loss_C,
-    'D': loss_D,
+    'A': torch.tensor([[1, 5], [3, 4]]),
+    'B': torch.tensor([[4, 5], [0, 1]]),
+    'C': torch.tensor([[0, 3], [1, 2]]),
+    'D': torch.tensor([[1, 3], [0, 4]])
 }
 
 theory = pd.read_csv('../theory/theory_synth.csv')
@@ -76,8 +37,7 @@ def semantic_loss(out, labels):
     feedback = [mapping[labels[i]] for i in range(len(labels))]
     output_1, output_2 = out
 
-    loss = [feedback[i](output_1[i], output_2[i]) for i in range(out[0].shape[0])]
-    # loss = [-torch.log(output_1[i][feedback[i][0][0]] * output_2[i][feedback[i][0][1]]  + output_1[i][feedback[i][1][0]] * output_2[i][feedback[i][1][1]]) for i in range(out[0].shape[0])]
+    loss = [-torch.log(output_1[i][feedback[i][0][0]] * output_2[i][feedback[i][0][1]] + output_1[i][feedback[i][1][0]] * output_2[i][feedback[i][1][1]]) for i in range(out[0].shape[0])]
     loss = torch.mean(torch.stack(loss))
 
     return loss

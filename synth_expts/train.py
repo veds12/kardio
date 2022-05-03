@@ -244,7 +244,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--seed', type=int, default=42, help='random seed')
     parser.add_argument('--model', type=str, default='cnn', help='Type of neural module. Choose from: lstm, cnn, mlp')
-    parser.add_argument('--neural_branch', type=bool, default=True, help='Whether to use the neural branch or not')
+    parser.add_argument('--neural_branch', type=bool, default=False, help='Whether to use the neural branch or not')
     parser.add_argument('--data', type=str, default='./data/raw/', help='path of data')
     parser.add_argument('--name', type=str, default=None, help='name of run')
     parser.add_argument('--checkpoint', type=str, default=None, help='path for storing model checkpoints')
