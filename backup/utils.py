@@ -18,7 +18,6 @@ class TimeSeriesDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.dataframe.iloc[idx, :-1]
         sample = np.array(sample).astype(np.float64)
-        sample = (sample - sample.mean()) / sample.std()   # normalize
         label = self.dataframe.iloc[idx, -1]
 
         return sample, label

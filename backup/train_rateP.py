@@ -59,18 +59,31 @@ def train(args):
 
     train_data_N = train_data.loc[train_data['Class'] == 'N']
     train_data_A = train_data.loc[train_data['Class'] == 'A']
+    # train_data_O = train_data.loc[train_data['Class'] == 'O']
+    # train_data_O = train_data_O.sample(frac=1)[:int(0.3*len(train_data_O))]
+    # train_data_O_lt = train_data_O[:(int(0.557*len(train_data_O)))]
+    # train_data_O_gt = train_data_O[(int(0.557*len(train_data_O))):]
     train_data_N = train_data_N.sample(frac=1)[:int(0.15*len(train_data_N))]
 
     train_data_A = train_data_A.replace(to_replace='A', value='lt')
     train_data_N = train_data_N.replace(to_replace='N', value='gt')
+    # train_data_O_lt = train_data_O_lt.replace(to_replace='O', value='lt')
+    # train_data_O_gt = train_data_O_gt.replace(to_replace='O', value='gt')
     train_data = pd.concat([train_data_N, train_data_A])
+    train_data = train_data.sample(frac=1)
     
     test_data_N = test_data.loc[test_data['Class'] == 'N']
     test_data_A = test_data.loc[test_data['Class'] == 'A']
+    # test_data_O = test_data.loc[test_data['Class'] == 'O']
+    # test_data_O_lt = test_data_O[:(int(0.557*len(train_data_O)))]
+    # test_data_O_gt = test_data_O[(int(0.557*len(train_data_O))):]
     
     test_data_A = test_data_A.replace(to_replace='A', value='lt')
     test_data_N = test_data_N.replace(to_replace='N', value='gt')
+    # test_data_O_lt = test_data_O_lt.replace(to_replace='O', value='lt')
+    # test_data_O_gt = test_data_O_gt.replace(to_replace='O', value='gt')
     test_data = pd.concat([test_data_N, test_data_A])
+    test_data = test_data.sample(frac=1)
 
     train_min = train_data.min()[:-1].to_numpy().min()
     train_max = train_data.max()[:-1].to_numpy().max()
@@ -167,14 +180,17 @@ def train(args):
         if epoch % args.test_every == 0:
             test_loss, test_acc = evaluate(model, test_dataloader)
 
-            print(f'Test Loss: {test_loss:.5f} | Test Accuracy: {test_acc:.5f}')
+            if args.verbose:
+                print(f'Test Loss: {test_loss:.5f} | Test Accuracy: {test_acc:.5f}')
+                
             if args.logging:
                 wandb.log({
                     'test_loss': test_loss,
                     'test_acc': test_acc,
                 })
         else:
-            print(f'Test Loss: NA | Test Accuracy: NA')
+            if args.verbose:
+                print(f'Test Loss: NA | Test Accuracy: NA')
 
         if args.checkpoint is not None and epoch % args.chkpt_every == 0:
             torch.save(model.state_dict(), os.path.join(CHECKPOINT_PATH, f'{args.seed}.pt'))
@@ -224,7 +240,7 @@ if __name__ == "__main__":
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint directory')
     parser.add_argument('--name', type=str, default=None, help='Name of experiment')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('--verbose', action='store_true', help='Verbose if')
     parser.add_argument('--logging', action='store_true', help='Log to wandb')
     parser.add_argument('--load_chkpt', type=str, default=None, help='Path to checkpoint')
 

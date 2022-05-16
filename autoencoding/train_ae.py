@@ -81,16 +81,26 @@ def train(args):
     train_max = train_data.max()[:-1].to_numpy().max()
 
     columns = train_data.columns.tolist()[:-1]
-    train_data[columns] -= train_min
-    train_data[columns] /= (train_max - train_min)
-    test_data[columns] -= train_min
-    test_data[columns] /= (train_max - train_min)
+
+    columns = train_data.columns.tolist()[:-1]
+    train_data_num = train_data[columns].to_numpy()
+    mean = train_data_num.mean()
+    std = train_data_num.std()
+    # train_data[columns] -= train_min
+    # train_data[columns] /= (train_max - train_min)
+    # test_data[columns] -= train_min
+    # test_data[columns] /= (train_max - train_min)
+
+    train_data[columns] -= mean
+    train_data[columns] /= std
+    test_data[columns] -= mean
+    test_data[columns] /= std
 
     train_dataset = TimeSeriesDataset(train_data)
     test_dataset = TimeSeriesDataset(test_data)
 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=test_data.shape[0], shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     if args.verbose:
         print(f'Number of datapoints for class A: {data_A.shape[0]}')
@@ -190,6 +200,8 @@ def evaluate(model, test_dataloader, device, dtype):
         for x, labels in test_dataloader:
             x = x.permute(1, 0).unsqueeze(-1).to(device).to(dtype)
             x_recon, x_emb = model(x)
+            print(x)
+            print(x_recon)
 
             loss = nn.MSELoss()(x_recon, x)
 
